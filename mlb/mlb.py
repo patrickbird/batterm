@@ -23,10 +23,10 @@ def print_boxscore(game):
     print '| {:3} | {:>2} | {:>2} | {:>2} |'.format(game['away_name_abbrev'], score['r']['away'], score['h']['away'], score['e']['away'])
     print '| {:3} | {:>2} | {:>2} | {:>2} |'.format(game['home_name_abbrev'], score['r']['home'], score['h']['home'], score['e']['home'])
     print '----------------------'
-    print 'W: {}'.format(get_deciding_pitcher_line(game['winning_pitcher']))
-    print 'L: {}'.format(get_deciding_pitcher_line(game['losing_pitcher']))
+    print 'W: {}'.format(get_deciding_pitcher_line(game['winning_pitcher'])) if 'winning_pitcher' in game else ''
+    print 'L: {}'.format(get_deciding_pitcher_line(game['losing_pitcher'])) if 'losing_pitcher' in game else ''
 
-    if game['save_pitcher']['name_display_roster']:
+    if 'save_pitcher' in game and game['save_pitcher']['name_display_roster'] != '':
         print 'S: {} ({})'.format(game['save_pitcher']['name_display_roster'], game['save_pitcher']['saves'])
 
 def print_detailed_boxscore(game):
