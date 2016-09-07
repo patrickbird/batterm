@@ -3,8 +3,26 @@ import json
 import requests
 import shutil
 import sys
-from math import ceil
 from multiprocessing.dummy import Pool as ThreadPool
+
+
+
+
+def create_empty_linescore():
+    return {                
+            'r': {
+                'home': '',
+                'away': ''
+            },
+            'h': {
+                'home': '',
+                'away': ''
+            },
+            'e': {
+                'home': '',
+                'away': ''
+            }
+    }
 
 def get_scorecard_url(date_time):
     "Get the master scorecard URL of a given day."
@@ -21,7 +39,7 @@ def get_deciding_pitcher_line(pitcher):
 
 def print_boxscore(game):
     boxscore = []
-    score = game['linescore']
+    score = game['linescore'] if 'linescore' in game else create_empty_linescore()
     boxscore.append('----------------------')
     boxscore.append('| {:3} | {:>2} | {:>2} | {:>2} |'.format(game['away_name_abbrev'], score['r']['away'], score['h']['away'], score['e']['away']))
     boxscore.append('| {:3} | {:>2} | {:>2} | {:>2} |'.format(game['home_name_abbrev'], score['r']['home'], score['h']['home'], score['e']['home']))
@@ -67,27 +85,26 @@ def print_boxscores(boxscores):
                     print ('')
 
 
-day_count=1
+day_count=3
 
 pool = ThreadPool(day_count)
-#results = pool.map(get_scorecard, get_scorecard_urls(datetime.datetime.today(), day_count))
-results = pool.map(get_scorecard, get_scorecard_urls(datetime.datetime.today() - datetime.timedelta(1), day_count))
+results = pool.map(get_scorecard, get_scorecard_urls(datetime.datetime.today(), day_count))
+#results = pool.map(get_scorecard, get_scorecard_urls(datetime.datetime.today() - datetime.timedelta(1), day_count))
 
 pool.close()
 pool.join()
 
 boxscores = []
+print('')
 for result in results:
     for index, game in enumerate(result['game']):
-        print (str(index) + ')')
-        boxscore = print_boxscore(game)
-        boxscores.append(boxscore)
-        print ('')
-        #print_detailed_boxscore(game)
-        #print ''
+        boxscores.append(print_boxscore(game))
+    
+    print('{}-{}-{}'.format(result['year'], result['month'], result['day']))
+    print('')
+    print_boxscores(boxscores)
+    boxscores.clear()
+    print('')
 
-print_boxscores(boxscores)
-
-sys.exit(0)
 
 
