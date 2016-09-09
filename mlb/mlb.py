@@ -26,15 +26,40 @@ def create_empty_linescore():
             }
     }
 
-def get_scorecard_url(date_time):
-    "Get the master scorecard URL of a given day."
-    return 'http://m.mlb.com/gdcross/components/game/mlb/year_{0}/month_{1}/day_{2}/master_scoreboard.json'.format(date_time.year, str(date_time.month).zfill(2), str(date_time.day).zfill(2))
+class ScorecardManager:
+    _scoreboards = {}
 
-def get_scorecard_urls(date, count):
-    return [get_scorecard_url(date - datetime.timedelta(days=x)) for x in range(count)]
+    def _get_scoreboard_url(date):
+        "Get the master scorecard URL of a given day."
+        return date,'http://m.mlb.com/gdcross/components/game/mlb/year_{0}/month_{1}/day_{2}/master_scoreboard.json'.format(date.year, str(date.month).zfill(2), str(date.day).zfill(2))
 
-def get_scorecard(url):
-    return json.loads(requests.get(url).text)['data']['games']
+    def _get_scoreboard_url_chunk(date):
+        return [ScorecardManager._get_scoreboard_url(date + datetime.timedelta(days=5) - datetime.timedelta(days=x)) for x in range(10)]
+
+    def _get_scoreboard_dictionary(url):
+        scoreboard = json.loads(requests.get(url).text)['data']['games']
+        return datetime.date(int(scoreboard['year']), int(scoreboard['month']), int(scoreboard['day'])), scoreboard
+
+    def _get_scoreboard_dictionaries(urls):
+        pool = ThreadPool(len(urls))
+
+        results = pool.map(ScorecardManager._get_scoreboard_dictionary, urls)
+
+        pool.close()
+        pool.join()
+
+        return results
+
+    def get_scoreboard(date):
+        urls=[]
+        for scoreboard_date, scoreboard_url in ScorecardManager._get_scoreboard_url_chunk(date):
+            if scoreboard_date not in ScorecardManager._scoreboards:
+                urls.append(scoreboard_url)
+
+        if len(urls) > 0 and date not in ScorecardManager._scoreboards:
+            ScorecardManager._scoreboards.update(ScorecardManager._get_scoreboard_dictionaries(urls))
+
+        return ScorecardManager._scoreboards[date]
 
 def get_deciding_pitcher_line(pitcher):
     return '{} ({}, {}-{})'.format(pitcher['name_display_roster'], pitcher['era'], pitcher['wins'], pitcher['losses'])
@@ -87,15 +112,6 @@ def print_boxscores(boxscores):
                 if k == boxscore_columns - 1:
                     print ('')
 
-def get_scoreboards(day_count):
-    pool = ThreadPool(day_count)
-    results = pool.map(get_scorecard, get_scorecard_urls(datetime.datetime.today(), day_count))
-
-    pool.close()
-    pool.join()
-
-    return results
-
 '''
 parser = argparse.ArgumentParser(description='Do some MLB stuff')
 parser.add_argument('-t', '--team', help = 'the team to fetch')
@@ -131,16 +147,39 @@ class MlbShell(cmd.Cmd):
     intro = 'Welcome to the MLB shell.\n'
     prompt = '(mlb) '
     file = None
+    date = datetime.date.today()
+
+    def print_rhe():
+        scoreboard = ScorecardManager.get_scoreboard(MlbShell.date)
+        boxscores = [print_boxscore(x) for x in scoreboard['game']]
+        
+        print('')
+        print('{}-{}-{}'.format(scoreboard['year'], scoreboard['month'], scoreboard['day']))
+        print('')
+        print_boxscores(boxscores)
 
     def do_rhe(self, arg):
-        for scoreboard in get_scoreboards(1):
-            boxscores = [print_boxscore(x) for x in scoreboard['game']]
+        MlbShell.print_rhe()
+
+        #for scoreboard in get_scoreboards(1):
+            #boxscores = [print_boxscore(x) for x in scoreboard['game']]
             
-            print('{}-{}-{}'.format(scoreboard['year'], scoreboard['month'], scoreboard['day']))
-            print('')
-            print_boxscores(boxscores)
-            boxscores.clear()
-            print('')
+            #print('{}-{}-{}'.format(scoreboard['year'], scoreboard['month'], scoreboard['day']))
+            #print('')
+            #print_boxscores(boxscores)
+            #boxscores.clear()
+            #print('')
+
+    def do_p(self, arg):
+        MlbShell.date = MlbShell.date - datetime.timedelta(days=1)
+        MlbShell.print_rhe()
+
+    def do_n(self, arg):
+        MlbShell.date = MlbShell.date + datetime.timedelta(days=1)
+        MlbShell.print_rhe()
+
+    def preloop(self):
+        MlbShell.print_rhe()
 
     def do_quit(self, arg):
         return True
