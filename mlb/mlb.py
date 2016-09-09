@@ -1,3 +1,5 @@
+import argparse
+import cmd
 import datetime
 import json
 import requests
@@ -70,6 +72,7 @@ def print_boxscores(boxscores):
     if len(boxscores) % boxscore_columns > 0:
         boxscore_rows += 1
 
+
     for i in range(0, boxscore_rows):
         for j in range(0, 8):
             for k in range(0, boxscore_columns):
@@ -84,27 +87,66 @@ def print_boxscores(boxscores):
                 if k == boxscore_columns - 1:
                     print ('')
 
+def get_scoreboards(day_count):
+    pool = ThreadPool(day_count)
+    results = pool.map(get_scorecard, get_scorecard_urls(datetime.datetime.today(), day_count))
 
-day_count=3
+    pool.close()
+    pool.join()
 
-pool = ThreadPool(day_count)
-results = pool.map(get_scorecard, get_scorecard_urls(datetime.datetime.today(), day_count))
-#results = pool.map(get_scorecard, get_scorecard_urls(datetime.datetime.today() - datetime.timedelta(1), day_count))
+    return results
 
-pool.close()
-pool.join()
+'''
+parser = argparse.ArgumentParser(description='Do some MLB stuff')
+parser.add_argument('-t', '--team', help = 'the team to fetch')
+parser.add_argument('-n', '--number', default = 1, help = 'the number of games to fetch')
 
-boxscores = []
-print('')
-for result in results:
-    for index, game in enumerate(result['game']):
-        boxscores.append(print_boxscore(game))
-    
-    print('{}-{}-{}'.format(result['year'], result['month'], result['day']))
+subparsers = parser.add_subparsers(dest='subparser_name')
+
+rhe_parser = subparsers.add_parser('rhe', help = 'rhe help')
+line_parser = subparsers.add_parser('line', help = 'line help')
+
+args = vars(parser.parse_args())
+print(args)
+
+if 'subparser_name' not in args:
+    sys.exit(0)
+
+if args['subparser_name'] == 'line':
+
     print('')
-    print_boxscores(boxscores)
-    boxscores.clear()
-    print('')
 
+if args['subparser_name'] == 'rhe':
+    for scoreboard in get_scoreboards(args['number']):
+        boxscores = [print_boxscore(x) for x in scoreboard['game']]
+        
+        print('{}-{}-{}'.format(scoreboard['year'], scoreboard['month'], scoreboard['day']))
+        print('')
+        print_boxscores(boxscores)
+        boxscores.clear()
+        print('')
+'''
+
+class MlbShell(cmd.Cmd):
+    intro = 'Welcome to the MLB shell.\n'
+    prompt = '(mlb) '
+    file = None
+
+    def do_rhe(self, arg):
+        for scoreboard in get_scoreboards(1):
+            boxscores = [print_boxscore(x) for x in scoreboard['game']]
+            
+            print('{}-{}-{}'.format(scoreboard['year'], scoreboard['month'], scoreboard['day']))
+            print('')
+            print_boxscores(boxscores)
+            boxscores.clear()
+            print('')
+
+    def do_quit(self, arg):
+        return True
+        
+
+if __name__ == '__main__':
+    MlbShell().cmdloop()
 
 
