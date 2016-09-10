@@ -7,9 +7,6 @@ import shutil
 import sys
 from multiprocessing.dummy import Pool as ThreadPool
 
-
-
-
 def create_empty_linescore():
     return {                
             'r': {
@@ -67,28 +64,50 @@ def get_deciding_pitcher_line(pitcher):
 def print_boxscore(game):
     boxscore = []
     score = game['linescore'] if 'linescore' in game else create_empty_linescore()
+    status = game['status']['status']
+
+    if status != 'In Progress':
+        boxscore.append(status)
+    else:
+        boxscore.append(game['status']['inning_state'][:3] + ' ' + game['status']['inning'])
+        boxscore[-1] += '  {}-{}, {} {}'.format(game['status']['b'], game['status']['s'], game['status']['o'], 'Outs' if int(game['status']['o']) != 1 else 'Out')
+
     boxscore.append('----------------------')
     boxscore.append('| {:3} | {:>2} | {:>2} | {:>2} |'.format(game['away_name_abbrev'], score['r']['away'], score['h']['away'], score['e']['away']))
     boxscore.append('| {:3} | {:>2} | {:>2} | {:>2} |'.format(game['home_name_abbrev'], score['r']['home'], score['h']['home'], score['e']['home']))
     boxscore.append('----------------------')
-    boxscore.append('W: {}'.format(get_deciding_pitcher_line(game['winning_pitcher']))) if 'winning_pitcher' in game else ''
-    boxscore.append('L: {}'.format(get_deciding_pitcher_line(game['losing_pitcher']))) if 'losing_pitcher' in game else ''
 
-    if 'save_pitcher' in game and game['save_pitcher']['name_display_roster'] != '':
-        boxscore.append('S: {} ({})'.format(game['save_pitcher']['name_display_roster'], game['save_pitcher']['saves']))
+    if game['status']['status'] == 'Final':
+        boxscore.append('W: {}'.format(get_deciding_pitcher_line(game['winning_pitcher']))) if 'winning_pitcher' in game else ''
+        boxscore.append('L: {}'.format(get_deciding_pitcher_line(game['losing_pitcher']))) if 'losing_pitcher' in game else ''
+
+        if 'save_pitcher' in game and game['save_pitcher']['name_display_roster'] != '':
+            boxscore.append('S: {} ({})'.format(game['save_pitcher']['name_display_roster'], game['save_pitcher']['saves']))
+
+    elif status == 'In Progress':
+        runners = game['runners_on_base']
+        boxscore.append('  {}    '.format("\u2b25" if 'runner_on_2b' in runners else "\u2b26"))
+        boxscore[-1] += 'P:  {}'.format(game['pitcher']['name_display_roster'])
+
+        boxscore.append('{}   '.format("\u2b25" if 'runner_on_3b' in runners else "\u2b26"))
+        boxscore[-1] += '{}  AB: {}'.format("\u2b25" if 'runner_on_1b' in runners else "\u2b26", game['batter']['name_display_roster'])
+
+        #boxscore.append(' {}-{} {} Out(s)'.format(game['status']['b'], game['status']['s'], game['status']['o']))
+        boxscore.append('')
 
     return boxscore
 
 def print_detailed_boxscore(game):
     score = game['linescore']
-    print('----------------------')
-    inning_numbers = [' {:>2} '.format(str(x)) for x in range(1, len(score['inning']) + 1)]
+    inning_numbers = [' {:>2} '.format(str(x)) for x in range(1, 10)]
     away_runs =      [' {:>2} '.format(x['away']) for x in score['inning']]
     home_runs =      [' {:>2} '.format('' if x.get('home') is None else x['home']) for x in score['inning']]
     
+    print('----------------------')
     print ('|'.join(inning_numbers))
-    print ('|'.join(away_runs))
-    print ('|'.join(home_runs))
+    print('----------------------')
+    print (game['away_team_name'] + ' ' + '|'.join(away_runs))
+    print (game['home_team_name'] + ' ' + '|'.join(home_runs))
 
 def print_boxscores(boxscores):
     terminal_size = shutil.get_terminal_size((80, 20))
@@ -99,7 +118,7 @@ def print_boxscores(boxscores):
 
 
     for i in range(0, boxscore_rows):
-        for j in range(0, 8):
+        for j in range(0, 9):
             for k in range(0, boxscore_columns):
                 index = i * boxscore_columns + k
                 if index >= len(boxscores):
@@ -107,7 +126,10 @@ def print_boxscores(boxscores):
                 elif j >= len(boxscores[index]):
                     print ('{:40}'.format(''), end='')
                 else:
-                    print ('{:40}'.format(boxscores[index][j]), end='')
+                    if j == 0:
+                        print('{:40}'.format(str(i * boxscore_columns + k + 1) + '. ' + boxscores[index][j]), end='')
+                    else:
+                        print ('{:40}'.format(boxscores[index][j]), end='')
 
                 if k == boxscore_columns - 1:
                     print ('')
@@ -156,19 +178,16 @@ class MlbShell(cmd.Cmd):
         print('')
         print('{}-{}-{}'.format(scoreboard['year'], scoreboard['month'], scoreboard['day']))
         print('')
+
         print_boxscores(boxscores)
+
+    def do_box(self, arg):
+        print(arg)
+        scoreboard = ScorecardManager.get_scoreboard(MlbShell.date)
+        print_detailed_boxscore(scoreboard['game'][int(arg) - 1])
 
     def do_rhe(self, arg):
         MlbShell.print_rhe()
-
-        #for scoreboard in get_scoreboards(1):
-            #boxscores = [print_boxscore(x) for x in scoreboard['game']]
-            
-            #print('{}-{}-{}'.format(scoreboard['year'], scoreboard['month'], scoreboard['day']))
-            #print('')
-            #print_boxscores(boxscores)
-            #boxscores.clear()
-            #print('')
 
     def do_p(self, arg):
         MlbShell.date = MlbShell.date - datetime.timedelta(days=1)
@@ -179,7 +198,7 @@ class MlbShell(cmd.Cmd):
         MlbShell.print_rhe()
 
     def preloop(self):
-        MlbShell.print_rhe()
+       MlbShell.print_rhe()
 
     def do_quit(self, arg):
         return True
