@@ -239,6 +239,32 @@ class MlbShell(cmd.Cmd):
         team_boxscore = get_team_boxscore(game, 'home')
         print(*team_boxscore, sep='\n')
 
+    def do_plays(self, arg):
+        scoreboard = ScorecardManager.get_scoreboard(MlbShell.date)
+        scoreboard_game = scoreboard['game'][int(arg) - 1]
+        game = json.loads(requests.get('http://statsapi.mlb.com/api/v1/game/' + scoreboard_game['game_pk']  + '/feed/live').text)
+
+        scoring_indices = [int(x) for x in game['liveData']['plays']['scoringPlays']]
+        scoring_plays = [game['liveData']['plays']['allPlays'][x] for x in scoring_indices]
+
+        play_dict = {}
+        for play in scoring_plays:
+            key = play['about']['halfInning'].title() + ' ' + play['about']['inning']
+
+            if key not in play_dict:
+                play_dict[key] = []
+                
+            pitcher = game['liveData']['players']['allPlayers']['ID' + play['matchup']['pitcher']]
+            play_dict[key].append(play['result']['description'] + pitcher['name']['first'] + ' ' + pitcher['name']['last'] + ' pitching.')
+
+        for k,v in play_dict.items():
+            print(k)
+            for p in v:
+                print('  ' + p)
+
+            print('')
+
+
     def do_rhe(self, arg):
         MlbShell.print_rhe()
 
