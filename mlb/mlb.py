@@ -99,15 +99,22 @@ def print_boxscore(game):
 
 def print_detailed_boxscore(game):
     score = game['linescore']
-    inning_numbers = [' {:>2} '.format(str(x)) for x in range(1, 10)]
+    inning_count = max(9, len(score['inning']))
+
+    inning_numbers = [' {:>2} '.format(str(x)) for x in range(1, inning_count + 1)]
     away_runs =      [' {:>2} '.format(x['away']) for x in score['inning']]
     home_runs =      [' {:>2} '.format('' if x.get('home') is None else x['home']) for x in score['inning']]
     
-    print('----------------------')
-    print ('|'.join(inning_numbers))
-    print('----------------------')
-    print (game['away_team_name'] + ' ' + '|'.join(away_runs))
-    print (game['home_team_name'] + ' ' + '|'.join(home_runs))
+    buf = []
+    buf.append('--------------' + ('-----' * inning_count))
+    buf.append('            |' + '|'.join(inning_numbers))
+    buf.append('--------------' + ('-----' * inning_count))
+
+    buf.append('| {:10}'.format(game['away_team_name']) + '|' + '|'.join(away_runs))
+    buf.append('| {:10}'.format(game['home_team_name']) + '|' + '|'.join(home_runs))
+    buf.append('--------------' + ('-----' * inning_count))
+
+    return buf
 
 def print_boxscores(boxscores):
     terminal_size = shutil.get_terminal_size((80, 20))
@@ -184,7 +191,8 @@ class MlbShell(cmd.Cmd):
     def do_box(self, arg):
         print(arg)
         scoreboard = ScorecardManager.get_scoreboard(MlbShell.date)
-        print_detailed_boxscore(scoreboard['game'][int(arg) - 1])
+        boxscore = print_detailed_boxscore(scoreboard['game'][int(arg) - 1])
+        print(*boxscore, sep='\n')
 
     def do_rhe(self, arg):
         MlbShell.print_rhe()
@@ -203,7 +211,6 @@ class MlbShell(cmd.Cmd):
     def do_quit(self, arg):
         return True
         
-
 if __name__ == '__main__':
     MlbShell().cmdloop()
 
