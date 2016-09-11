@@ -103,20 +103,24 @@ def print_detailed_boxscore(game):
     
     header = [str(x) for x in range(1, inning_count + 1)] + ['r', 'h', 'e']
     away_runs = [x['away'] for x in score['inning']] + [score['r']['away'], score['h']['away'], score['e']['away']]
-    home_runs = [x['home'] for x in score['inning']] + [score['r']['home'], score['h']['home'], score['e']['home']]
+    home_runs = [x.get('home', ' ') for x in score['inning']] + [score['r']['home'], score['h']['home'], score['e']['home']]
 
     buf = []
+    buf.append(game['time_date'])
+    buf.append(game['location'] + ', ' + game['venue'])
     buf.append('--------------' + ('-----' * len(header)))
-    buf.append('            |' + '|'.join(' {:>2} '.format(x) for x in header))
+    buf.append(' {:11}'.format(game['status']['status']) + ' '.join(' {:>2} '.format(x) for x in header))
     buf.append('--------------' + ('-----' * len(header)))
 
-    buf.append('| {:10}'.format(game['away_team_name']) + '|' + '|'.join(' {:>2} '.format(x) for x in away_runs))
-    buf.append('| {:10}'.format(game['home_team_name']) + '|' + '|'.join(' {:>2} '.format(x) for x in home_runs))
+    buf.append(' {:11}'.format(game['away_team_name']) + ' '.join(' {:>2} '.format(x) for x in away_runs))
+    buf.append(' {:11}'.format(game['home_team_name']) + ' '.join(' {:>2} '.format(x) for x in home_runs))
     buf.append('--------------' + ('-----' * len(header)))
+    buf.append('')
 
     return buf
 
-def get_team_boxscore(players):
+def get_team_boxscore(game, sel):
+    players = game['liveData']['boxscore']['teams'][sel]['players']
     batters = []
     for player in list(players.values()):
         if player['gameStats']['batting']['battingOrder'] != None:
@@ -125,23 +129,30 @@ def get_team_boxscore(players):
     batters.sort(key=lambda x: x['gameStats']['batting']['battingOrder'])
 
     lines = []
+    lines.append(game['gameData']['teams'][sel]['name']['full'])
     for batter in batters:
         b_stat = batter['gameStats']['batting']
         lines.append('-' * 80)
 
-        if int(b_stat['battingOrder']) % 100 == 0:
-            template = ' {:14} {:>10}  {:>2}  {:>2}  {:>2}  {:>2}  {:>2}  {:>2}  {:>2}  {:>5}  {:>5}'
-        else:
-            template = '   {:12} {:>10}  {:>2}  {:>2}  {:>2}  {:>2}  {:>2}  {:>2}  {:>2}  {:>5}  {:>5}'
-
+        batter_template = ' {:14}' if int(b_stat['battingOrder']) % 100 == 0 else '   {:12}'
+        template = batter_template + ' {:>10}' + ('  {:>2}' * 7) + ('  {:>5}' * 2)
 
         lines.append(template.format(
             batter['name']['boxname'], batter['position'], 
             b_stat['atBats'], b_stat['runs'], b_stat['hits'], b_stat['rbi'], b_stat['baseOnBalls'], b_stat['strikeOuts'], b_stat['leftOnBase'], 
             batter['seasonStats']['batting']['avg'], batter['seasonStats']['batting']['ops']
         ))
+        
+    lines.append('-' * 80)
+
+    total = game['liveData']['boxscore']['teams'][sel]['battingTotals']
+    lines.append((' {:14} {:>10}' + ('  {:>2}' * 7) + ('  {:>5}' * 2)).format(
+        'Total', ' ' ,
+        total['atBats'], total['runs'], total['hits'], total['rbi'], total['baseOnBalls'], total['strikeOuts'], total['leftOnBase'], '', ''
+    ))
 
     lines.append('-' * 80)
+    lines.append('')
     return lines
 
 def print_boxscores(boxscores):
@@ -223,9 +234,9 @@ class MlbShell(cmd.Cmd):
         boxscore = print_detailed_boxscore(scoreboard_game)
         print(*boxscore, sep='\n')
 
-        team_boxscore = get_team_boxscore(game['liveData']['boxscore']['teams']['away']['players'])
+        team_boxscore = get_team_boxscore(game, 'away')
         print(*team_boxscore, sep='\n')
-        team_boxscore = get_team_boxscore(game['liveData']['boxscore']['teams']['home']['players'])
+        team_boxscore = get_team_boxscore(game, 'home')
         print(*team_boxscore, sep='\n')
 
     def do_rhe(self, arg):
