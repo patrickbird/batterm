@@ -31,7 +31,7 @@ class ScorecardManager:
         return date,'http://m.mlb.com/gdcross/components/game/mlb/year_{0}/month_{1}/day_{2}/master_scoreboard.json'.format(date.year, str(date.month).zfill(2), str(date.day).zfill(2))
 
     def _get_scoreboard_url_chunk(date):
-        return [ScorecardManager._get_scoreboard_url(date + datetime.timedelta(days=5) - datetime.timedelta(days=x)) for x in range(10)]
+        return [ScorecardManager._get_scoreboard_url(date + datetime.timedelta(days=1) - datetime.timedelta(days=x)) for x in range(3)]
 
     def _get_scoreboard_dictionary(url):
         scoreboard = json.loads(requests.get(url).text)['data']['games']
@@ -100,21 +100,49 @@ def print_boxscore(game):
 def print_detailed_boxscore(game):
     score = game['linescore']
     inning_count = max(9, len(score['inning']))
-
-    inning_numbers = [' {:>2} '.format(str(x)) for x in range(1, inning_count + 1)]
-    away_runs =      [' {:>2} '.format(x['away']) for x in score['inning']]
-    home_runs =      [' {:>2} '.format('' if x.get('home') is None else x['home']) for x in score['inning']]
     
-    buf = []
-    buf.append('--------------' + ('-----' * inning_count))
-    buf.append('            |' + '|'.join(inning_numbers))
-    buf.append('--------------' + ('-----' * inning_count))
+    header = [str(x) for x in range(1, inning_count + 1)] + ['r', 'h', 'e']
+    away_runs = [x['away'] for x in score['inning']] + [score['r']['away'], score['h']['away'], score['e']['away']]
+    home_runs = [x['home'] for x in score['inning']] + [score['r']['home'], score['h']['home'], score['e']['home']]
 
-    buf.append('| {:10}'.format(game['away_team_name']) + '|' + '|'.join(away_runs))
-    buf.append('| {:10}'.format(game['home_team_name']) + '|' + '|'.join(home_runs))
-    buf.append('--------------' + ('-----' * inning_count))
+    buf = []
+    buf.append('--------------' + ('-----' * len(header)))
+    buf.append('            |' + '|'.join(' {:>2} '.format(x) for x in header))
+    buf.append('--------------' + ('-----' * len(header)))
+
+    buf.append('| {:10}'.format(game['away_team_name']) + '|' + '|'.join(' {:>2} '.format(x) for x in away_runs))
+    buf.append('| {:10}'.format(game['home_team_name']) + '|' + '|'.join(' {:>2} '.format(x) for x in home_runs))
+    buf.append('--------------' + ('-----' * len(header)))
 
     return buf
+
+def get_team_boxscore(players):
+    batters = []
+    for player in list(players.values()):
+        if player['gameStats']['batting']['battingOrder'] != None:
+            batters.append(player)
+
+    batters.sort(key=lambda x: x['gameStats']['batting']['battingOrder'])
+
+    lines = []
+    for batter in batters:
+        b_stat = batter['gameStats']['batting']
+        lines.append('-' * 80)
+
+        if int(b_stat['battingOrder']) % 100 == 0:
+            template = '| {:14} {:>10} | {:>2} | {:>2} | {:>2} | {:>2} | {:>2} | {:>2} | {:>2} | {:>5} | {:>5} |'
+        else:
+            template = '|   {:12} {:>10} | {:>2} | {:>2} | {:>2} | {:>2} | {:>2} | {:>2} | {:>2} | {:>5} | {:>5} |'
+
+
+        lines.append(template.format(
+            batter['name']['boxname'], batter['position'], 
+            b_stat['atBats'], b_stat['runs'], b_stat['hits'], b_stat['rbi'], b_stat['baseOnBalls'], b_stat['strikeOuts'], b_stat['leftOnBase'], 
+            batter['seasonStats']['batting']['avg'], batter['seasonStats']['batting']['ops']
+        ))
+
+    lines.append('-' * 80)
+    return lines
 
 def print_boxscores(boxscores):
     terminal_size = shutil.get_terminal_size((80, 20))
@@ -189,10 +217,16 @@ class MlbShell(cmd.Cmd):
         print_boxscores(boxscores)
 
     def do_box(self, arg):
-        print(arg)
         scoreboard = ScorecardManager.get_scoreboard(MlbShell.date)
-        boxscore = print_detailed_boxscore(scoreboard['game'][int(arg) - 1])
+        scoreboard_game = scoreboard['game'][int(arg) - 1]
+        game = json.loads(requests.get('http://statsapi.mlb.com/api/v1/game/' + scoreboard_game['game_pk']  + '/feed/live').text)
+        boxscore = print_detailed_boxscore(scoreboard_game)
         print(*boxscore, sep='\n')
+
+        team_boxscore = get_team_boxscore(game['liveData']['boxscore']['teams']['away']['players'])
+        print(*team_boxscore, sep='\n')
+        team_boxscore = get_team_boxscore(game['liveData']['boxscore']['teams']['home']['players'])
+        print(*team_boxscore, sep='\n')
 
     def do_rhe(self, arg):
         MlbShell.print_rhe()
