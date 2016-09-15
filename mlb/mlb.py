@@ -66,10 +66,10 @@ class Scoreboard:
     def get_deciding_pitcher_line(self, pitcher):
         return '{} ({}, {}-{})'.format(pitcher['name_display_roster'], pitcher['era'], pitcher['wins'], pitcher['losses'])
 
-    def get_boxscores(self):
-        return [self.get_boxscore(x) for x in self.scoreboard['game']]
+    def get_rhes(self):
+        return [self.get_rhe(x) for x in self.scoreboard['game']]
 
-    def get_boxscore(self, game):
+    def get_rhe(self, game):
         boxscore = []
         score = game['linescore'] if 'linescore' in game else self._create_empty_linescore()
         status = game['status']['status']
@@ -105,7 +105,8 @@ class Scoreboard:
 
         return boxscore
 
-    def print_detailed_boxscore(self, game):
+    def print_detailed_boxscore(self, index):
+        game = self.scoreboard['game'][index]
         score = game['linescore']
         inning_count = max(9, len(score['inning']))
         
@@ -127,41 +128,56 @@ class Scoreboard:
 
         return buf
 
-def get_team_boxscore(game, sel):
-    players = game['liveData']['boxscore']['teams'][sel]['players']
-    batters = []
-    for player in list(players.values()):
-        if player['gameStats']['batting']['battingOrder'] != None:
-            batters.append(player)
+    def get_statgame_id(self, index):
+        return self.scoreboard['game'][index]['game_pk']
 
-    batters.sort(key=lambda x: x['gameStats']['batting']['battingOrder'])
+    def get_statgame(self, index):
+        return StatGame(self.get_statgame_id(index))
 
-    lines = []
-    lines.append(game['gameData']['teams'][sel]['name']['full'])
-    for batter in batters:
-        b_stat = batter['gameStats']['batting']
+class StatGame:
+    def __init__(self, game_id):
+        self.game_id = game_id
+        self.game = self._get_statgame_dictionary()
+
+    def _get_statgame_dictionary(self):
+        return json.loads(requests.get('http://statsapi.mlb.com/api/v1/game/' + self.game_id + '/feed/live').text)
+
+    def get_team_boxscore(self, sel):
+        game = self.game
+        players = game['liveData']['boxscore']['teams'][sel]['players']
+        batters = []
+        for player in list(players.values()):
+            if player['gameStats']['batting']['battingOrder'] != None:
+                batters.append(player)
+
+        batters.sort(key=lambda x: x['gameStats']['batting']['battingOrder'])
+
+        lines = []
+        lines.append(game['gameData']['teams'][sel]['name']['full'])
+        for batter in batters:
+            b_stat = batter['gameStats']['batting']
+            lines.append('-' * 80)
+
+            batter_template = ' {:14}' if int(b_stat['battingOrder']) % 100 == 0 else '   {:12}'
+            template = batter_template + ' {:>10}' + ('  {:>2}' * 7) + ('  {:>5}' * 2)
+
+            lines.append(template.format(
+                batter['name']['boxname'], batter['position'], 
+                b_stat['atBats'], b_stat['runs'], b_stat['hits'], b_stat['rbi'], b_stat['baseOnBalls'], b_stat['strikeOuts'], b_stat['leftOnBase'], 
+                batter['seasonStats']['batting']['avg'], batter['seasonStats']['batting']['ops']
+            ))
+            
         lines.append('-' * 80)
 
-        batter_template = ' {:14}' if int(b_stat['battingOrder']) % 100 == 0 else '   {:12}'
-        template = batter_template + ' {:>10}' + ('  {:>2}' * 7) + ('  {:>5}' * 2)
-
-        lines.append(template.format(
-            batter['name']['boxname'], batter['position'], 
-            b_stat['atBats'], b_stat['runs'], b_stat['hits'], b_stat['rbi'], b_stat['baseOnBalls'], b_stat['strikeOuts'], b_stat['leftOnBase'], 
-            batter['seasonStats']['batting']['avg'], batter['seasonStats']['batting']['ops']
+        total = game['liveData']['boxscore']['teams'][sel]['battingTotals']
+        lines.append((' {:14} {:>10}' + ('  {:>2}' * 7) + ('  {:>5}' * 2)).format(
+            'Total', ' ' ,
+            total['atBats'], total['runs'], total['hits'], total['rbi'], total['baseOnBalls'], total['strikeOuts'], total['leftOnBase'], '', ''
         ))
-        
-    lines.append('-' * 80)
 
-    total = game['liveData']['boxscore']['teams'][sel]['battingTotals']
-    lines.append((' {:14} {:>10}' + ('  {:>2}' * 7) + ('  {:>5}' * 2)).format(
-        'Total', ' ' ,
-        total['atBats'], total['runs'], total['hits'], total['rbi'], total['baseOnBalls'], total['strikeOuts'], total['leftOnBase'], '', ''
-    ))
-
-    lines.append('-' * 80)
-    lines.append('')
-    return lines
+        lines.append('-' * 80)
+        lines.append('')
+        return lines
 
 def print_boxscores(boxscores):
     terminal_size = shutil.get_terminal_size((80, 20))
@@ -232,18 +248,22 @@ class MlbShell(cmd.Cmd):
         print(scoreboard.date)
         print('')
 
-        print_boxscores(scoreboard.get_boxscores())
+        print_boxscores(scoreboard.get_rhes())
 
     def do_box(self, arg):
         scoreboard = ScoreboardManager.get_scoreboard(MlbShell.date)
-        scoreboard_game = scoreboard['game'][int(arg) - 1]
-        game = json.loads(requests.get('http://statsapi.mlb.com/api/v1/game/' + scoreboard_game['game_pk']  + '/feed/live').text)
-        boxscore = print_detailed_boxscore(scoreboard_game)
+
+        #scoreboard_game = scoreboard['game'][int(arg) - 1]
+        #game = json.loads(requests.get('http://statsapi.mlb.com/api/v1/game/' + scoreboard_game['game_pk']  + '/feed/live').text)
+
+        index = int(arg) - 1
+        game = scoreboard.get_statgame(index)
+        boxscore = scoreboard.print_detailed_boxscore(index)
         print(*boxscore, sep='\n')
 
-        team_boxscore = get_team_boxscore(game, 'away')
+        team_boxscore = game.get_team_boxscore('away')
         print(*team_boxscore, sep='\n')
-        team_boxscore = get_team_boxscore(game, 'home')
+        team_boxscore = game.get_team_boxscore('home')
         print(*team_boxscore, sep='\n')
 
     def do_plays(self, arg):
