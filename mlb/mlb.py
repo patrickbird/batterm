@@ -179,30 +179,21 @@ class StatGame:
         lines.append('')
         return lines
 
-def print_boxscores(boxscores):
-    terminal_size = shutil.get_terminal_size((80, 20))
-    boxscore_columns = int(int(terminal_size.columns)/40)
-    boxscore_rows = int(len(boxscores) / boxscore_columns)
-    if len(boxscores) % boxscore_columns > 0:
-        boxscore_rows += 1
+    def print_run_scoring_plays(self):
+        game = self.game
+        scoring_indices = [int(x) for x in game['liveData']['plays']['scoringPlays']]
+        scoring_plays = [game['liveData']['plays']['allPlays'][x] for x in scoring_indices]
 
+        halfInning = ''
+        for play in scoring_plays:
+            key = play['about']['halfInning'].title() + ' ' + play['about']['inning']
+            
+            if halfInning != key:
+                halfInning = key
+                print('\n' + key)
 
-    for i in range(0, boxscore_rows):
-        for j in range(0, 9):
-            for k in range(0, boxscore_columns):
-                index = i * boxscore_columns + k
-                if index >= len(boxscores):
-                    print ('{:40}'.format(''), end='')
-                elif j >= len(boxscores[index]):
-                    print ('{:40}'.format(''), end='')
-                else:
-                    if j == 0:
-                        print('{:40}'.format(str(i * boxscore_columns + k + 1) + '. ' + boxscores[index][j]), end='')
-                    else:
-                        print ('{:40}'.format(boxscores[index][j]), end='')
-
-                if k == boxscore_columns - 1:
-                    print ('')
+            pitcher = game['liveData']['players']['allPlayers']['ID' + play['matchup']['pitcher']]
+            print('    ' + play['result']['description'] + pitcher['name']['first'] + ' ' + pitcher['name']['last'] + ' pitching.')
 
 '''
 parser = argparse.ArgumentParser(description='Do some MLB stuff')
@@ -230,7 +221,7 @@ if args['subparser_name'] == 'rhe':
         
         print('{}-{}-{}'.format(scoreboard['year'], scoreboard['month'], scoreboard['day']))
         print('')
-        print_boxscores(boxscores)
+        print_rhes(boxscores)
         boxscores.clear()
         print('')
 '''
@@ -241,24 +232,45 @@ class MlbShell(cmd.Cmd):
     file = None
     date = datetime.date.today()
 
+    def print_rhes(boxscores):
+        terminal_size = shutil.get_terminal_size((80, 20))
+        boxscore_columns = int(int(terminal_size.columns)/40)
+        boxscore_rows = int(len(boxscores) / boxscore_columns)
+        if len(boxscores) % boxscore_columns > 0:
+            boxscore_rows += 1
+
+
+        for i in range(0, boxscore_rows):
+            for j in range(0, 9):
+                for k in range(0, boxscore_columns):
+                    index = i * boxscore_columns + k
+                    if index >= len(boxscores):
+                        print ('{:40}'.format(''), end='')
+                    elif j >= len(boxscores[index]):
+                        print ('{:40}'.format(''), end='')
+                    else:
+                        if j == 0:
+                            print('{:40}'.format(str(i * boxscore_columns + k + 1) + '. ' + boxscores[index][j]), end='')
+                        else:
+                            print ('{:40}'.format(boxscores[index][j]), end='')
+
+                    if k == boxscore_columns - 1:
+                        print ('')
+
     def print_rhe():
-        scoreboard = ScoreboardManager.get_scoreboard(MlbShell.date)
+        MlbShell.scoreboard = ScoreboardManager.get_scoreboard(MlbShell.date)
         
         print('')
-        print(scoreboard.date)
+        print(MlbShell.scoreboard.date)
         print('')
 
-        print_boxscores(scoreboard.get_rhes())
+        MlbShell.print_rhes(MlbShell.scoreboard.get_rhes())
 
     def do_box(self, arg):
-        scoreboard = ScoreboardManager.get_scoreboard(MlbShell.date)
-
-        #scoreboard_game = scoreboard['game'][int(arg) - 1]
-        #game = json.loads(requests.get('http://statsapi.mlb.com/api/v1/game/' + scoreboard_game['game_pk']  + '/feed/live').text)
-
         index = int(arg) - 1
-        game = scoreboard.get_statgame(index)
-        boxscore = scoreboard.print_detailed_boxscore(index)
+        
+        game = MlbShell.scoreboard.get_statgame(index)
+        boxscore = MlbShell.scoreboard.print_detailed_boxscore(index)
         print(*boxscore, sep='\n')
 
         team_boxscore = game.get_team_boxscore('away')
@@ -267,30 +279,10 @@ class MlbShell(cmd.Cmd):
         print(*team_boxscore, sep='\n')
 
     def do_plays(self, arg):
-        scoreboard = ScoreboardManager.get_scoreboard(MlbShell.date)
-        scoreboard_game = scoreboard['game'][int(arg) - 1]
-        game = json.loads(requests.get('http://statsapi.mlb.com/api/v1/game/' + scoreboard_game['game_pk']  + '/feed/live').text)
+        index = int(arg) - 1
 
-        scoring_indices = [int(x) for x in game['liveData']['plays']['scoringPlays']]
-        scoring_plays = [game['liveData']['plays']['allPlays'][x] for x in scoring_indices]
-
-        play_dict = {}
-        for play in scoring_plays:
-            key = play['about']['halfInning'].title() + ' ' + play['about']['inning']
-
-            if key not in play_dict:
-                play_dict[key] = []
-                
-            pitcher = game['liveData']['players']['allPlayers']['ID' + play['matchup']['pitcher']]
-            play_dict[key].append(play['result']['description'] + pitcher['name']['first'] + ' ' + pitcher['name']['last'] + ' pitching.')
-
-        for k,v in play_dict.items():
-            print(k)
-            for p in v:
-                print('  ' + p)
-
-            print('')
-
+        game = MlbShell.scoreboard.get_statgame(index)
+        game.print_run_scoring_plays()
 
     def do_rhe(self, arg):
         MlbShell.print_rhe()
