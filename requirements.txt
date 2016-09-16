@@ -1,0 +1,4 @@
+requests
+
+-e git://github.com/patrickbird/cachupy.git#egg=cachupy
+
