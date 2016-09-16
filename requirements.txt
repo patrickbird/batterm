@@ -1,4 +1,4 @@
 requests
 
--e git://github.com/patrickbird/cachupy.git#egg=cachupy
+git+https://github.com/patrickbird/cachupy.git#egg=cachupy
 
