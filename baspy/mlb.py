@@ -40,7 +40,7 @@ class Scoreboard:
         self.url = self._get_scoreboard_url()
         self.scoreboard = self._get_scoreboard_dictionary()
 
-    def _create_empty_linescore():
+    def _create_empty_linescore(self):
         return {                
                 'r': {
                     'home': '',
@@ -195,37 +195,6 @@ class StatGame:
             pitcher = game['liveData']['players']['allPlayers']['ID' + play['matchup']['pitcher']]
             print('    ' + play['result']['description'] + pitcher['name']['first'] + ' ' + pitcher['name']['last'] + ' pitching.')
 
-'''
-parser = argparse.ArgumentParser(description='Do some MLB stuff')
-parser.add_argument('-t', '--team', help = 'the team to fetch')
-parser.add_argument('-n', '--number', default = 1, help = 'the number of games to fetch')
-
-subparsers = parser.add_subparsers(dest='subparser_name')
-
-rhe_parser = subparsers.add_parser('rhe', help = 'rhe help')
-line_parser = subparsers.add_parser('line', help = 'line help')
-
-args = vars(parser.parse_args())
-print(args)
-
-if 'subparser_name' not in args:
-    sys.exit(0)
-
-if args['subparser_name'] == 'line':
-
-    print('')
-
-if args['subparser_name'] == 'rhe':
-    for scoreboard in get_scoreboards(args['number']):
-        boxscores = [print_boxscore(x) for x in scoreboard['game']]
-        
-        print('{}-{}-{}'.format(scoreboard['year'], scoreboard['month'], scoreboard['day']))
-        print('')
-        print_rhes(boxscores)
-        boxscores.clear()
-        print('')
-'''
-
 class MlbShell(cmd.Cmd):
     intro = 'Welcome to the MLB shell.\n'
     prompt = '(mlb) '
@@ -303,5 +272,4 @@ class MlbShell(cmd.Cmd):
         
 if __name__ == '__main__':
     MlbShell().cmdloop()
-
 
