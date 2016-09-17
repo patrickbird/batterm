@@ -1,4 +1,5 @@
 import argparse
+import cachupy
 import cmd
 import datetime
 import json
@@ -8,18 +9,19 @@ import sys
 from multiprocessing.dummy import Pool as ThreadPool
 
 class ScoreboardManager:
-    _scoreboards = {}
+    _scoreboards = cachupy.Cache()
 
     def get_scoreboard(date):
-        dates=[]
-        for new_date in ScoreboardManager._get_date_range(date):
-            if new_date not in ScoreboardManager._scoreboards:
-                dates.append(new_date)
+        ScoreboardManager._scoreboards.lock = True
+        dates = list(filter(lambda x: not ScoreboardManager._scoreboards.has(x), ScoreboardManager._get_date_range(date)))
 
-        if len(dates) > 0 and date not in ScoreboardManager._scoreboards:
-            ScoreboardManager._scoreboards.update([(s.date, s) for s in ScoreboardManager._get_scoreboards(dates)])
+        if len(dates) > 0:
+            ScoreboardManager._scoreboards.set(datetime.timedelta(seconds=30),[(s.date, s) for s in ScoreboardManager._get_scoreboards(dates)])
 
-        return ScoreboardManager._scoreboards[date]
+        scoreboard = ScoreboardManager._scoreboards.get(date)
+        ScoreboardManager._scoreboards.lock = False
+
+        return scoreboard
 
     def _get_date_range(date):
         return [date + datetime.timedelta(days=1) - datetime.timedelta(days=x) for x in range(3)]
@@ -195,7 +197,7 @@ class StatGame:
             pitcher = game['liveData']['players']['allPlayers']['ID' + play['matchup']['pitcher']]
             print('    ' + play['result']['description'] + pitcher['name']['first'] + ' ' + pitcher['name']['last'] + ' pitching.')
 
-class MlbShell(cmd.Cmd):
+class BaseCmdShell(cmd.Cmd):
     intro = 'Welcome to the MLB shell.\n'
     prompt = '(mlb) '
     file = None
@@ -207,7 +209,6 @@ class MlbShell(cmd.Cmd):
         boxscore_rows = int(len(boxscores) / boxscore_columns)
         if len(boxscores) % boxscore_columns > 0:
             boxscore_rows += 1
-
 
         for i in range(0, boxscore_rows):
             for j in range(0, 9):
@@ -227,19 +228,19 @@ class MlbShell(cmd.Cmd):
                         print ('')
 
     def print_rhe():
-        MlbShell.scoreboard = ScoreboardManager.get_scoreboard(MlbShell.date)
+        BaseCmdShell.scoreboard = ScoreboardManager.get_scoreboard(BaseCmdShell.date)
         
         print('')
-        print(MlbShell.scoreboard.date)
+        print(BaseCmdShell.scoreboard.date)
         print('')
 
-        MlbShell.print_rhes(MlbShell.scoreboard.get_rhes())
+        BaseCmdShell.print_rhes(BaseCmdShell.scoreboard.get_rhes())
 
     def do_box(self, arg):
         index = int(arg) - 1
         
-        game = MlbShell.scoreboard.get_statgame(index)
-        boxscore = MlbShell.scoreboard.print_detailed_boxscore(index)
+        game = BaseCmdShell.scoreboard.get_statgame(index)
+        boxscore = BaseCmdShell.scoreboard.print_detailed_boxscore(index)
         print(*boxscore, sep='\n')
 
         team_boxscore = game.get_team_boxscore('away')
@@ -250,26 +251,26 @@ class MlbShell(cmd.Cmd):
     def do_plays(self, arg):
         index = int(arg) - 1
 
-        game = MlbShell.scoreboard.get_statgame(index)
+        game = BaseCmdShell.scoreboard.get_statgame(index)
         game.print_run_scoring_plays()
 
     def do_rhe(self, arg):
-        MlbShell.print_rhe()
+        BaseCmdShell.print_rhe()
 
     def do_p(self, arg):
-        MlbShell.date = MlbShell.date - datetime.timedelta(days=1)
-        MlbShell.print_rhe()
+        BaseCmdShell.date = BaseCmdShell.date - datetime.timedelta(days=1)
+        BaseCmdShell.print_rhe()
 
     def do_n(self, arg):
-        MlbShell.date = MlbShell.date + datetime.timedelta(days=1)
-        MlbShell.print_rhe()
+        BaseCmdShell.date = BaseCmdShell.date + datetime.timedelta(days=1)
+        BaseCmdShell.print_rhe()
 
     def preloop(self):
-       MlbShell.print_rhe()
+       BaseCmdShell.print_rhe()
 
     def do_quit(self, arg):
         return True
         
 if __name__ == '__main__':
-    MlbShell().cmdloop()
+    BaseCmdShell().cmdloop()
 
